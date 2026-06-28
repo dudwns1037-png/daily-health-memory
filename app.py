@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import calendar
-import os
 
 # ------------------------------------------------------------
 # 페이지 기본 설정
@@ -15,10 +14,8 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# CSV 기반 Health Memory 저장 설정
+# Health Memory CSV 형식
 # ------------------------------------------------------------
-
-MEMORY_FILE = "health_memory.csv"
 
 REQUIRED_COLUMNS = [
     "날짜",
@@ -37,25 +34,14 @@ REQUIRED_COLUMNS = [
     "짧은일기"
 ]
 
-
-def load_records():
-    if os.path.exists(MEMORY_FILE):
-        df = pd.read_csv(MEMORY_FILE)
-        return df.to_dict("records")
-    return []
-
-
-def save_records(records):
-    df = pd.DataFrame(records)
-    df.to_csv(MEMORY_FILE, index=False, encoding="utf-8-sig")
-
-
 # ------------------------------------------------------------
-# Health Memory 저장 공간 만들기
+# Health Memory 저장 공간
+# 서버 파일에 저장하지 않고, 접속한 사용자 세션에서만 보관합니다.
+# 이어서 사용하려면 다운로드한 CSV 파일을 다시 업로드합니다.
 # ------------------------------------------------------------
 
 if "records" not in st.session_state:
-    st.session_state.records = load_records()
+    st.session_state.records = []
 
 if "selected_memory_date" not in st.session_state:
     st.session_state.selected_memory_date = None
@@ -81,7 +67,7 @@ st.info(
 # ------------------------------------------------------------
 
 uploaded_csv = st.file_uploader(
-    "저장해둔 Health Memory CSV 파일을 불러오세요.",
+    "기존 Health Memory CSV 파일을 불러오려면 업로드하세요.",
     type=["csv"]
 )
 
@@ -92,7 +78,6 @@ if uploaded_csv is not None:
         if st.button("업로드한 CSV로 Health Memory 복구하기"):
             uploaded_df = uploaded_df[REQUIRED_COLUMNS]
             st.session_state.records = uploaded_df.to_dict("records")
-            save_records(st.session_state.records)
             st.session_state.selected_memory_date = None
             st.success("Health Memory가 업로드한 CSV 파일 기준으로 복구되었습니다.")
             st.rerun()
@@ -405,7 +390,7 @@ if st.button("오늘의 건강 습관 분석하기"):
 
     # --------------------------------------------------------
     # 분석 결과 출력
-    # --------------------------------------------------------
+    # ------------------------------------------------------------
 
     st.subheader("2. Health Data Analysis")
 
@@ -518,11 +503,8 @@ if st.button("오늘의 건강 습관 분석하기"):
 
     st.session_state.records.append(new_record)
 
-    # CSV 파일에 저장
-    save_records(st.session_state.records)
-
-    st.success("memory write 완료: 오늘의 건강 기록이 Health Memory에 저장되었습니다.")
-    st.info("저장된 기록은 CSV로 다운로드할 수 있으며, 나중에 다시 업로드해 이어서 사용할 수 있습니다.")
+    st.success("memory write 완료: 오늘의 건강 기록이 현재 세션의 Health Memory에 저장되었습니다.")
+    st.info("기록을 계속 보관하려면 아래에서 Health Memory CSV를 다운로드해 주세요. 나중에 다시 업로드하면 이어서 사용할 수 있습니다.")
 
 # ------------------------------------------------------------
 # 하단 memory summary
@@ -701,8 +683,4 @@ if len(st.session_state.records) > 0:
     if st.button("Health Memory 초기화"):
         st.session_state.records = []
         st.session_state.selected_memory_date = None
-
-        if os.path.exists(MEMORY_FILE):
-            os.remove(MEMORY_FILE)
-
         st.rerun()
