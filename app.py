@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import calendar
+import os
 
 # ------------------------------------------------------------
 # 페이지 기본 설정
@@ -14,11 +15,47 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
+# CSV 기반 Health Memory 저장 설정
+# ------------------------------------------------------------
+
+MEMORY_FILE = "health_memory.csv"
+
+REQUIRED_COLUMNS = [
+    "날짜",
+    "수면시간",
+    "운동시간",
+    "근무시간",
+    "휴식시간",
+    "식사횟수",
+    "간식횟수",
+    "건강루틴점수",
+    "수면상태",
+    "운동상태",
+    "식사상태",
+    "간식상태",
+    "휴식상태",
+    "짧은일기"
+]
+
+
+def load_records():
+    if os.path.exists(MEMORY_FILE):
+        df = pd.read_csv(MEMORY_FILE)
+        return df.to_dict("records")
+    return []
+
+
+def save_records(records):
+    df = pd.DataFrame(records)
+    df.to_csv(MEMORY_FILE, index=False, encoding="utf-8-sig")
+
+
+# ------------------------------------------------------------
 # Health Memory 저장 공간 만들기
 # ------------------------------------------------------------
 
 if "records" not in st.session_state:
-    st.session_state.records = []
+    st.session_state.records = load_records()
 
 if "selected_memory_date" not in st.session_state:
     st.session_state.selected_memory_date = None
@@ -38,6 +75,33 @@ st.markdown("### memory read")
 st.info(
     f"현재 Health Memory에 저장된 기록: {len(st.session_state.records)}개"
 )
+
+# ------------------------------------------------------------
+# CSV 업로드 복구 기능
+# ------------------------------------------------------------
+
+uploaded_csv = st.file_uploader(
+    "저장해둔 Health Memory CSV 파일을 불러오세요.",
+    type=["csv"]
+)
+
+if uploaded_csv is not None:
+    uploaded_df = pd.read_csv(uploaded_csv)
+
+    if all(col in uploaded_df.columns for col in REQUIRED_COLUMNS):
+        if st.button("업로드한 CSV로 Health Memory 복구하기"):
+            uploaded_df = uploaded_df[REQUIRED_COLUMNS]
+            st.session_state.records = uploaded_df.to_dict("records")
+            save_records(st.session_state.records)
+            st.session_state.selected_memory_date = None
+            st.success("Health Memory가 업로드한 CSV 파일 기준으로 복구되었습니다.")
+            st.rerun()
+    else:
+        st.error("CSV 파일 형식이 맞지 않습니다. 이 앱에서 다운로드한 Health Memory CSV 파일을 업로드해 주세요.")
+
+# ------------------------------------------------------------
+# 상단 달력 memory read
+# ------------------------------------------------------------
 
 if len(st.session_state.records) == 0:
     st.write("아직 Health Memory에 저장된 기록이 없습니다. 오늘의 건강 습관을 분석하면 memory가 저장됩니다.")
@@ -97,19 +161,20 @@ else:
             records_df_top["날짜"].dt.strftime("%Y-%m-%d") == selected_date_top
         ]
 
-        selected_row_top = selected_rows_top.iloc[-1]
+        if len(selected_rows_top) > 0:
+            selected_row_top = selected_rows_top.iloc[-1]
 
-        st.write(f"##### {selected_date_top} Memory")
+            st.write(f"##### {selected_date_top} Memory")
 
-        st.metric(
-            "건강 루틴 점수",
-            f"{selected_row_top['건강루틴점수']} / 100"
-        )
+            st.metric(
+                "건강 루틴 점수",
+                f"{selected_row_top['건강루틴점수']} / 100"
+            )
 
-        if selected_row_top["짧은일기"]:
-            st.info(selected_row_top["짧은일기"])
-        else:
-            st.info("이 날짜에는 저장된 일기가 없습니다.")
+            if pd.notna(selected_row_top["짧은일기"]) and selected_row_top["짧은일기"] != "":
+                st.info(selected_row_top["짧은일기"])
+            else:
+                st.info("이 날짜에는 저장된 일기가 없습니다.")
 
 # ------------------------------------------------------------
 # 앱 소개
@@ -432,10 +497,10 @@ if st.button("오늘의 건강 습관 분석하기"):
 
     # --------------------------------------------------------
     # memory write
-    # --------------------------------------------------------
+    # ------------------------------------------------------------
 
     new_record = {
-        "날짜": date,
+        "날짜": str(date),
         "수면시간": sleep_hours,
         "운동시간": exercise_hours,
         "근무시간": work_hours,
@@ -453,7 +518,11 @@ if st.button("오늘의 건강 습관 분석하기"):
 
     st.session_state.records.append(new_record)
 
+    # CSV 파일에 저장
+    save_records(st.session_state.records)
+
     st.success("memory write 완료: 오늘의 건강 기록이 Health Memory에 저장되었습니다.")
+    st.info("저장된 기록은 CSV로 다운로드할 수 있으며, 나중에 다시 업로드해 이어서 사용할 수 있습니다.")
 
 # ------------------------------------------------------------
 # 하단 memory summary
@@ -632,4 +701,8 @@ if len(st.session_state.records) > 0:
     if st.button("Health Memory 초기화"):
         st.session_state.records = []
         st.session_state.selected_memory_date = None
+
+        if os.path.exists(MEMORY_FILE):
+            os.remove(MEMORY_FILE)
+
         st.rerun()
